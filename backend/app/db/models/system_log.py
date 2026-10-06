@@ -1,8 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
-from sqlalchemy import String, DateTime, JSON
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import String, DateTime, JSON, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -12,7 +11,7 @@ class SystemLog(Base):
     __tablename__ = "system_logs"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        Uuid(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4,
     )
