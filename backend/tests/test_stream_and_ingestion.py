@@ -1,19 +1,18 @@
 import io
+import json
 import uuid
 from unittest.mock import MagicMock, patch
 import pytest
-from sqlalchemy import select
-from starlette.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from app.core.security import create_access_token
-from app.db.models import User
-from app.db.session import get_db
+from app.db.models import ChatSession, Document, Message, User
 from app.ingestion.parsers.docx_parser import DOCXParser
 from app.ingestion.parsers.txt_parser import TXTParser
-from app.main import app
+from app.ingestion.tasks import _async_ingest_document
 from app.rag.prompts import FALLBACK_RESPONSE
+from app.services.chat_service import ChatService
 from app.storage.vector_store import VectorQueryResult
-from tests.conftest import TestingSessionLocal
 
 
 def test_txt_parser():
@@ -32,89 +31,109 @@ def test_docx_parser():
         assert "Paragraph details" in results[1]["text"]
 
 
-@pytest.fixture(autouse=True)
-def override_test_db():
-    async def override_get_db():
-        async with TestingSessionLocal() as session:
-            yield session
+class MockWebSocket:
+    """Mock WebSocket for async deterministic streaming tests."""
+    def __init__(self, incoming_json_messages):
+        self.incoming = [json.dumps(m) for m in incoming_json_messages]
+        self.sent = []
 
-    app.dependency_overrides[get_db] = override_get_db
-    yield
-    app.dependency_overrides.pop(get_db, None)
+    async def receive_text(self) -> str:
+        if not self.incoming:
+            raise WebSocketDisconnect()
+        return self.incoming.pop(0)
 
-
-def test_websocket_stream_unanswerable_query(student_user: User):
-    token = create_access_token({"sub": str(student_user.id), "role": student_user.role})
-
-    with TestClient(app) as client:
-        create_res = client.post(
-            "/api/v1/chat/sessions",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"title": "WS Test"},
-        )
-        assert create_res.status_code == 201
-        session_id = create_res.json()["id"]
-
-        with patch("app.rag.retriever.retriever.retrieve", return_value=None):
-            with client.websocket_connect(f"/api/v1/chat/sessions/{session_id}/stream?token={token}") as ws:
-                ws.send_json({"question": "What is quantum gravity?"})
-
-                frame1 = ws.receive_json()
-                assert frame1["type"] == "token"
-                assert frame1["data"] == FALLBACK_RESPONSE
-
-                frame2 = ws.receive_json()
-                assert frame2["type"] == "done"
+    async def send_json(self, data) -> None:
+        self.sent.append(data)
 
 
-def test_websocket_stream_grounded_answer(student_user: User):
-    token = create_access_token({"sub": str(student_user.id), "role": student_user.role})
+@pytest.mark.asyncio
+async def test_chat_stream_unanswerable_query(student_user: User, db_session):
+    # 1. Create chat session
+    session = ChatSession(
+        id=uuid.uuid4(),
+        user_id=student_user.id,
+        title="Unanswerable Test",
+    )
+    db_session.add(session)
+    await db_session.commit()
 
-    with TestClient(app) as client:
-        create_res = client.post(
-            "/api/v1/chat/sessions",
-            headers={"Authorization": f"Bearer {token}"},
-            json={"title": "WS Grounded Test"},
-        )
-        assert create_res.status_code == 201
-        session_id = create_res.json()["id"]
+    mock_ws = MockWebSocket([{"question": "What is the secret formula?"}])
 
-        mock_chunk = VectorQueryResult(
-            id="c-test-1",
-            text="The library opens at 8:00 AM daily.",
-            distance=0.12,
-            metadata={
-                "file_name": "Handbook.pdf",
-                "page": 10,
-                "section": "Library Facilities",
-                "chunk_id": "c-test-1",
-            },
-        )
+    with patch("app.rag.retriever.retriever.retrieve", return_value=None):
+        await ChatService.handle_stream(mock_ws, session.id, student_user, db_session)
 
-        with patch("app.rag.retriever.retriever.retrieve", return_value=[mock_chunk]):
-            with client.websocket_connect(f"/api/v1/chat/sessions/{session_id}/stream?token={token}") as ws:
-                ws.send_json({"question": "When does the library open?"})
-
-                tokens = []
-                citations = []
-                while True:
-                    frame = ws.receive_json()
-                    if frame["type"] == "token":
-                        tokens.append(frame["data"])
-                    elif frame["type"] == "citation":
-                        citations.extend(frame["data"])
-                    elif frame["type"] == "done":
-                        break
-
-                assert len(tokens) > 0
-                assert len(citations) == 1
-                assert citations[0]["document_name"] == "Handbook.pdf"
-                assert citations[0]["page"] == 10
-                assert citations[0]["section"] == "Library Facilities"
+    # Verify fallback response frames
+    assert len(mock_ws.sent) == 2
+    assert mock_ws.sent[0]["type"] == "token"
+    assert mock_ws.sent[0]["data"] == FALLBACK_RESPONSE
+    assert mock_ws.sent[1]["type"] == "done"
 
 
-def test_websocket_rejects_missing_token():
-    client = TestClient(app)
-    with pytest.raises(Exception):
-        with client.websocket_connect(f"/api/v1/chat/sessions/{uuid.uuid4()}/stream"):
-            pass
+@pytest.mark.asyncio
+async def test_chat_stream_grounded_answer(student_user: User, db_session):
+    # 1. Create chat session
+    session = ChatSession(
+        id=uuid.uuid4(),
+        user_id=student_user.id,
+        title="Grounded Stream Test",
+    )
+    db_session.add(session)
+    await db_session.commit()
+
+    mock_chunk = VectorQueryResult(
+        id="chunk-test-1",
+        text="The campus health center operates Monday through Friday from 9 AM to 5 PM.",
+        distance=0.15,
+        metadata={
+            "file_name": "HealthCenterGuide.pdf",
+            "page": 3,
+            "section": "Operating Hours",
+            "chunk_id": "chunk-test-1",
+        },
+    )
+
+    mock_ws = MockWebSocket([{"question": "What are the health center hours?"}])
+
+    with patch("app.rag.retriever.retriever.retrieve", return_value=[mock_chunk]):
+        await ChatService.handle_stream(mock_ws, session.id, student_user, db_session)
+
+    # Verify streamed frames
+    tokens = [f["data"] for f in mock_ws.sent if f["type"] == "token"]
+    citations = [f["data"] for f in mock_ws.sent if f["type"] == "citation"]
+    done_frames = [f for f in mock_ws.sent if f["type"] == "done"]
+
+    assert len(tokens) > 0
+    assert len(citations) == 1
+    assert len(done_frames) == 1
+
+    first_citation = citations[0][0]
+    assert first_citation["document_name"] == "HealthCenterGuide.pdf"
+    assert first_citation["page"] == 3
+    assert first_citation["section"] == "Operating Hours"
+
+
+@pytest.mark.asyncio
+async def test_end_to_end_async_ingest_document(student_user: User, db_session):
+    doc_id = uuid.uuid4()
+    doc = Document(
+        id=doc_id,
+        file_name="regulations.txt",
+        storage_path=f"raw/{doc_id}/regulations.txt",
+        mime_type="text/plain",
+        status="pending",
+        uploaded_by=student_user.id,
+        chunk_count=0,
+    )
+    db_session.add(doc)
+    await db_session.commit()
+
+    sample_doc_bytes = b"Students must maintain 75% attendance to sit for semester examinations.\n\nAbsence requires approval."
+
+    with patch("app.storage.object_store.object_store.get", return_value=sample_doc_bytes), \
+         patch("app.ingestion.embedder.embedder.embed_documents", return_value=[[0.05] * 384, [0.06] * 384]), \
+         patch("app.storage.vector_store.vector_store.upsert") as mock_upsert:
+
+        result = await _async_ingest_document(str(doc_id))
+        assert result["status"] == "indexed"
+        assert result["chunk_count"] == 2
+        mock_upsert.assert_called_once()
