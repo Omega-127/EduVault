@@ -60,7 +60,11 @@ export function DocumentUploader({
   const handleUpload = async () => {
     if (!selectedFile) return;
     try {
-      await onUpload(selectedFile);
+      const result = await onUpload(selectedFile);
+      if (!result) {
+        setUploadStatus("error");
+        return;
+      }
       setUploadStatus("success");
       setSelectedFile(null);
     } catch {

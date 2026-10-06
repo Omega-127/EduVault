@@ -84,9 +84,20 @@ async def chat_stream_endpoint(
     db: AsyncSession = Depends(get_db),
 ):
     """WebSocket streaming endpoint for real-time grounded Q&A with token and citation frames."""
-    # 1. Authenticate user from JWT token parameter
-    user = await get_ws_current_user(websocket, token=token, db=db)
+    # Accept first so auth failures can close cleanly (closing before accept breaks ASGI)
     await websocket.accept()
+
+    try:
+        user = await get_ws_current_user(websocket, token=token, db=db)
+    except Exception:
+        try:
+            await websocket.send_json(
+                {"type": "error", "data": "Authentication failed. Please log in again."}
+            )
+        except Exception:
+            pass
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
 
     try:
         await ChatService.handle_stream(websocket, session_id, user, db)

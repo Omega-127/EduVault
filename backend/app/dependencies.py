@@ -1,6 +1,6 @@
 import uuid
 from typing import AsyncGenerator, Optional
-from fastapi import Depends, Header, HTTPException, Query, WebSocket, status
+from fastapi import Depends, Header, Query, WebSocket
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -64,25 +64,23 @@ async def get_ws_current_user(
 ) -> User:
     """Authenticates a WebSocket connection using a JWT token provided in query parameters."""
     if not token:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Missing authentication token")
-        raise HTTPException(status_code=401, detail="Missing authentication token")
+        raise AuthenticationException("Missing authentication token")
 
     try:
         payload = decode_token(token)
         user_id_str = payload.get("sub")
         if not user_id_str:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid token payload")
-            raise HTTPException(status_code=401, detail="Invalid token payload")
+            raise AuthenticationException("Invalid token payload")
 
         user_id = uuid.UUID(user_id_str)
         result = await db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
 
         if not user or not user.is_active:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="User inactive or not found")
-            raise HTTPException(status_code=401, detail="User inactive or not found")
+            raise AuthenticationException("User inactive or not found")
 
         return user
+    except AuthenticationException:
+        raise
     except Exception as e:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication failed")
-        raise HTTPException(status_code=401, detail=f"Authentication failed: {str(e)}")
+        raise AuthenticationException(f"Authentication failed: {str(e)}") from e

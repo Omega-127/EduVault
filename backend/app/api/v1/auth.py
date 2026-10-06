@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.exceptions import AuthenticationException
+from app.core.security import create_access_token, create_refresh_token
 from app.db.session import get_db
 from app.schemas.auth import (
     TokenResponse,
@@ -18,17 +19,36 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post(
     "/register",
-    response_model=UserResponse,
+    response_model=TokenResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new user account",
 )
 async def register(
     request: UserRegisterRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
-    """Registers a new student, faculty, or admin user."""
+    """Registers a new student, faculty, or admin user and returns JWT tokens."""
     user = await AuthService.register_user(db, request)
-    return user
+
+    token_payload = {"sub": str(user.id), "role": user.role}
+    access_token = create_access_token(token_payload)
+    refresh_token = create_refresh_token(token_payload)
+
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
+        samesite="lax",
+        secure=settings.APP_ENV == "production",
+    )
+
+    return TokenResponse(
+        access_token=access_token,
+        token_type="bearer",
+        user=UserResponse.model_validate(user),
+    )
 
 
 @router.post(

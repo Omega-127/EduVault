@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { createChatSocket, sendQuestion } from "@/lib/ws";
+import { createChatSocket, sendQuestion, waitForOpen } from "@/lib/ws";
 import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
 import type { Message, Citation, StreamingMessage, ChatSession } from "@/types/chat";
@@ -23,6 +23,15 @@ export function useChat(sessionId: string | null) {
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const getToken = useCallback(() => {
+    return (
+      accessToken ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("access_token")
+        : null)
+    );
+  }, [accessToken]);
+
   /** Load message history for the session */
   const loadHistory = useCallback(async () => {
     if (!sessionId) return;
@@ -41,25 +50,34 @@ export function useChat(sessionId: string | null) {
   }, [sessionId]);
 
   /** Connect WebSocket for streaming */
-  const connect = useCallback(() => {
-    const token =
-      accessToken ||
-      (typeof window !== "undefined"
-        ? localStorage.getItem("access_token")
-        : null);
+  const connect = useCallback((): WebSocket | null => {
+    const token = getToken();
 
-    if (!sessionId) return;
+    if (!sessionId) return null;
     if (!token) {
       setError("Please log in to chat with EduVault.");
-      return;
+      return null;
     }
 
-    // Close existing connection
+    // Reuse an open or connecting socket instead of tearing it down
+    if (
+      wsRef.current &&
+      (wsRef.current.readyState === WebSocket.OPEN ||
+        wsRef.current.readyState === WebSocket.CONNECTING)
+    ) {
+      return wsRef.current;
+    }
+
     if (wsRef.current) {
       wsRef.current.close();
+      wsRef.current = null;
     }
 
     const ws = createChatSocket(sessionId, token, {
+      onOpen: () => {
+        setIsConnected(true);
+        setError(null);
+      },
       onToken: (text) => {
         setStreaming((prev) => ({
           ...prev,
@@ -75,7 +93,6 @@ export function useChat(sessionId: string | null) {
       },
       onDone: () => {
         setStreaming((prev) => {
-          // Move the completed streaming message into the messages array
           const completedMessage: Message = {
             id: `msg-${Date.now()}`,
             session_id: sessionId!,
@@ -100,72 +117,67 @@ export function useChat(sessionId: string | null) {
       },
       onClose: () => {
         setIsConnected(false);
+        setStreaming((prev) =>
+          prev.isStreaming
+            ? { content: "", citations: [], isStreaming: false }
+            : prev
+        );
       },
     });
 
-    ws.onopen = () => {
-      setIsConnected(true);
-      setError(null);
-    };
     wsRef.current = ws;
-  }, [sessionId, accessToken]);
+    return ws;
+  }, [sessionId, getToken]);
 
   /** Send a question */
   const ask = useCallback(
-    (question: string) => {
-      const token =
-        accessToken ||
-        (typeof window !== "undefined"
-          ? localStorage.getItem("access_token")
-          : null);
+    async (question: string) => {
+      const token = getToken();
 
       if (!token) {
-        setError("You must be logged in to send messages. Please log in at /login.");
+        setError(
+          "You must be logged in to send messages. Please log in at /login."
+        );
         return;
       }
 
-      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-        // Attempt to reconnect
-        connect();
-        // Queue the message to send after connection attempt
-        setTimeout(() => {
-          if (wsRef.current?.readyState === WebSocket.OPEN) {
-            const userMessage: Message = {
-              id: `msg-${Date.now()}`,
-              session_id: sessionId!,
-              role: "user",
-              content: question,
-              citations: [],
-              created_at: new Date().toISOString(),
-            };
-            setMessages((prev) => [...prev, userMessage]);
-            sendQuestion(wsRef.current!, question);
-            setStreaming({ content: "", citations: [], isStreaming: true });
-            setError(null);
-          } else {
-            setError(
-              "Unable to connect to the backend server. Please verify the FastAPI backend is running on port 8000."
-            );
-          }
-        }, 800);
+      if (!sessionId) {
+        setError("No active chat session. Please start a new chat.");
         return;
       }
 
-      // Add user message immediately
-      const userMessage: Message = {
-        id: `msg-${Date.now()}`,
-        session_id: sessionId!,
-        role: "user",
-        content: question,
-        citations: [],
-        created_at: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, userMessage]);
-      sendQuestion(wsRef.current, question);
-      setStreaming({ content: "", citations: [], isStreaming: true });
-      setError(null);
+      try {
+        let ws = wsRef.current;
+        if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+          ws = connect();
+        }
+        if (!ws) {
+          setError("Unable to connect to the backend server.");
+          return;
+        }
+
+        await waitForOpen(ws, 10000);
+
+        const userMessage: Message = {
+          id: `msg-${Date.now()}`,
+          session_id: sessionId,
+          role: "user",
+          content: question,
+          citations: [],
+          created_at: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, userMessage]);
+        sendQuestion(ws, question);
+        setStreaming({ content: "", citations: [], isStreaming: true });
+        setError(null);
+      } catch {
+        setError(
+          "Unable to connect to the backend server. Please verify the API is running and try again."
+        );
+        setStreaming({ content: "", citations: [], isStreaming: false });
+      }
     },
-    [sessionId, accessToken, connect]
+    [sessionId, getToken, connect]
   );
 
   /** Load history and connect on mount */
@@ -177,6 +189,7 @@ export function useChat(sessionId: string | null) {
 
     return () => {
       wsRef.current?.close();
+      wsRef.current = null;
     };
   }, [sessionId, loadHistory, connect]);
 

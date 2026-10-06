@@ -21,15 +21,15 @@ router = APIRouter(prefix="/documents", tags=["Documents"])
     "/upload",
     response_model=DocumentUploadResponse,
     status_code=status.HTTP_202_ACCEPTED,
-    summary="Upload a document for async ingestion (Admin only)",
+    summary="Upload a document for async ingestion",
 )
 async def upload_document(
     file: UploadFile = File(...),
-    admin_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Uploads a PDF, DOCX, TXT, or CSV file to object storage and queues background ingestion."""
-    doc = await DocumentService.upload_document(db, file, admin_user)
+    doc = await DocumentService.upload_document(db, file, current_user)
     return DocumentUploadResponse(
         id=doc.id,
         file_name=doc.file_name,

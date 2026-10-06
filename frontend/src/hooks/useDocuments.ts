@@ -19,8 +19,10 @@ export function useDocuments() {
   const loadDocuments = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data } = await api.get<Document[]>("/documents/");
-      setDocuments(data);
+      const { data } = await api.get<{ total: number; documents: Document[] }>(
+        "/documents/"
+      );
+      setDocuments(data.documents ?? []);
     } catch {
       setError("Failed to load documents");
     } finally {
@@ -42,7 +44,6 @@ export function useDocuments() {
         "/documents/upload",
         formData,
         {
-          headers: { "Content-Type": "multipart/form-data" },
           onUploadProgress: (progressEvent) => {
             if (progressEvent.total) {
               const progress = Math.round(

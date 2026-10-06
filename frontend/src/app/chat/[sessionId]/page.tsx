@@ -37,7 +37,7 @@ export default function ChatSessionPage() {
       setUploadStatus(`"${file.name}" uploaded successfully! Indexing into knowledge base...`);
       setTimeout(() => setUploadStatus(null), 5000);
     } else {
-      setUploadStatus(`Failed to upload "${file.name}". (Uploads require Admin permissions)`);
+      setUploadStatus(`Failed to upload "${file.name}". Please try again.`);
       setTimeout(() => setUploadStatus(null), 6000);
     }
   };
