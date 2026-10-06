@@ -5,7 +5,7 @@ from fastapi import WebSocket
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import AuthorizationException, EntityNotFoundException
+from app.core.exceptions import AuthorizationException, EntityNotFoundException, ValidationException
 from app.core.logging import logger
 from app.db.models import ChatSession, Message, SystemLog, User
 from app.rag.citation_builder import CitationBuilder
@@ -82,6 +82,80 @@ class ChatService:
         return list(result.scalars().all())
 
     @staticmethod
+    async def answer_question(
+        db: AsyncSession,
+        session_id: uuid.UUID,
+        current_user: User,
+        question: str,
+    ) -> Tuple[Message, Message]:
+        """Runs retrieval + generation and persists both user and assistant messages."""
+        session = await ChatService.get_session(db, session_id, current_user)
+        question = (question or "").strip()
+        if not question:
+            raise ValidationException("Question cannot be empty")
+
+        user_msg = Message(
+            session_id=session.id,
+            role="user",
+            content=question,
+        )
+        db.add(user_msg)
+        await db.commit()
+        await db.refresh(user_msg)
+
+        try:
+            chunks = retriever.retrieve(question)
+        except Exception as e:
+            logger.error(f"Retrieval failed for question '{question}': {e}")
+            chunks = None
+
+        if not chunks:
+            logger.info(f"Unanswerable query detected: '{question}'")
+            asst_msg = Message(
+                session_id=session.id,
+                role="assistant",
+                content=FALLBACK_RESPONSE,
+                citations=[],
+            )
+            db.add(asst_msg)
+            db.add(
+                SystemLog(
+                    event_type="unanswerable_query",
+                    payload={
+                        "session_id": str(session.id),
+                        "user_id": str(current_user.id),
+                        "question": question,
+                    },
+                )
+            )
+            await db.commit()
+            await db.refresh(asst_msg)
+            return user_msg, asst_msg
+
+        try:
+            full_tokens: List[str] = []
+            async for token in generator.stream_answer(question, chunks):
+                full_tokens.append(token)
+            complete_answer = "".join(full_tokens)
+            citations = CitationBuilder.build_citations(chunks)
+            citation_payload = [c.model_dump() for c in citations]
+        except Exception as e:
+            logger.error(f"Generation failed for question '{question}': {e}")
+            complete_answer = FALLBACK_RESPONSE
+            citation_payload = []
+
+        asst_msg = Message(
+            session_id=session.id,
+            role="assistant",
+            content=complete_answer,
+            citations=citation_payload,
+        )
+        db.add(asst_msg)
+        await db.commit()
+        await db.refresh(asst_msg)
+        return user_msg, asst_msg
+
+    @staticmethod
     async def handle_stream(
         websocket: WebSocket,
         session_id: uuid.UUID,
@@ -89,7 +163,15 @@ class ChatService:
         db: AsyncSession,
     ) -> None:
         """Manages the full lifecycle of a WebSocket streaming session."""
-        session = await ChatService.get_session(db, session_id, current_user)
+        try:
+            session = await ChatService.get_session(db, session_id, current_user)
+        except Exception as e:
+            logger.error(f"WebSocket session validation failed: {e}")
+            await websocket.send_json({
+                "type": "error",
+                "data": str(getattr(e, "message", e)),
+            })
+            return
 
         while True:
             try:
@@ -100,79 +182,22 @@ class ChatService:
                 if not question:
                     continue
 
-                # 1. Save user question
-                user_msg = Message(
-                    session_id=session.id,
-                    role="user",
-                    content=question,
+                user_msg, asst_msg = await ChatService.answer_question(
+                    db, session.id, current_user, question
                 )
-                db.add(user_msg)
-                await db.commit()
 
-                # 2. Retrieve context chunks with safety threshold gate
-                chunks = retriever.retrieve(question)
-
-                if not chunks:
-                    # Low confidence / unanswerable: Skip LLM call entirely
-                    logger.info(f"Unanswerable query detected: '{question}'")
-                    await websocket.send_json({
-                        "type": "token",
-                        "data": FALLBACK_RESPONSE,
-                    })
-                    await websocket.send_json({"type": "done"})
-
-                    # Save fallback response message
-                    asst_msg = Message(
-                        session_id=session.id,
-                        role="assistant",
-                        content=FALLBACK_RESPONSE,
-                        citations=[],
-                    )
-                    db.add(asst_msg)
-
-                    # Log unanswerable query in system_logs
-                    log_entry = SystemLog(
-                        event_type="unanswerable_query",
-                        payload={
-                            "session_id": str(session.id),
-                            "user_id": str(current_user.id),
-                            "question": question,
-                        },
-                    )
-                    db.add(log_entry)
-                    await db.commit()
-                    continue
-
-                # 3. Stream grounded LLM generation
-                full_tokens: List[str] = []
-                async for token in generator.stream_answer(question, chunks):
-                    full_tokens.append(token)
-                    await websocket.send_json({
-                        "type": "token",
-                        "data": token,
-                    })
-
-                complete_answer = "".join(full_tokens)
-
-                # 4. Build and emit citations
-                citations = CitationBuilder.build_citations(chunks)
-                citation_payload = [c.model_dump() for c in citations]
-
+                # Stream the already-generated answer for WS clients
                 await websocket.send_json({
-                    "type": "citation",
-                    "data": citation_payload,
+                    "type": "token",
+                    "data": asst_msg.content,
                 })
+                if asst_msg.citations:
+                    await websocket.send_json({
+                        "type": "citation",
+                        "data": asst_msg.citations,
+                    })
                 await websocket.send_json({"type": "done"})
-
-                # 5. Persist assistant response with citations
-                asst_msg = Message(
-                    session_id=session.id,
-                    role="assistant",
-                    content=complete_answer,
-                    citations=citation_payload,
-                )
-                db.add(asst_msg)
-                await db.commit()
+                _ = user_msg  # persisted in answer_question
 
             except Exception as e:
                 logger.error(f"Error during WebSocket streaming: {e}")

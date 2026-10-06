@@ -32,7 +32,8 @@ class MessageResponse(BaseModel):
     session_id: uuid.UUID
     role: str
     content: str
-    citations: Optional[List[CitationItem]] = None
+    # Accept any JSON shape so malformed/legacy citation payloads don't 500 the chat
+    citations: Optional[List[Any]] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -40,6 +41,11 @@ class MessageResponse(BaseModel):
 
 class ChatQuestionRequest(BaseModel):
     question: str = Field(..., min_length=1)
+
+
+class ChatAskResponse(BaseModel):
+    user_message: MessageResponse
+    assistant_message: MessageResponse
 
 
 class StreamTokenFrame(BaseModel):

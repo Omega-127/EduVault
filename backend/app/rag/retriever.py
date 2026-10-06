@@ -3,7 +3,7 @@ from typing import List, Optional
 from app.config import settings
 from app.core.logging import logger
 from app.ingestion.embedder import embedder
-from app.storage.vector_store import VectorQueryResult, vector_store
+from app.storage.vector_store import EmptyVectorStore, VectorQueryResult, vector_store
 
 
 class RAGRetriever:
@@ -25,6 +25,11 @@ class RAGRetriever:
     ) -> Optional[List[VectorQueryResult]]:
         k = top_k if top_k is not None else self.top_k
         thresh = threshold if threshold is not None else self.threshold
+
+        # Avoid loading the embedding model when the vector DB is unavailable
+        if isinstance(vector_store, EmptyVectorStore):
+            logger.info("Retriever skipped: EmptyVectorStore has no indexed chunks.")
+            return None
 
         # Step 1: Embed query
         query_vector = embedder.embed_query(query)

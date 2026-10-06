@@ -7,6 +7,8 @@ from app.db.models import User
 from app.db.session import get_db
 from app.dependencies import get_current_user, get_ws_current_user
 from app.schemas.chat import (
+    ChatAskResponse,
+    ChatQuestionRequest,
     CreateSessionRequest,
     MessageResponse,
     SessionResponse,
@@ -74,6 +76,27 @@ async def get_session_messages(
     """Retrieves message history for the specified session."""
     messages = await ChatService.get_session_messages(db, session_id, current_user)
     return [MessageResponse.model_validate(m) for m in messages]
+
+
+@router.post(
+    "/sessions/{session_id}/ask",
+    response_model=ChatAskResponse,
+    summary="Ask a question and receive a grounded answer (HTTP)",
+)
+async def ask_question(
+    session_id: uuid.UUID,
+    request: ChatQuestionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """HTTP alternative to the WebSocket stream — more reliable through proxies and free-tier hosts."""
+    user_msg, asst_msg = await ChatService.answer_question(
+        db, session_id, current_user, request.question
+    )
+    return ChatAskResponse(
+        user_message=MessageResponse.model_validate(user_msg),
+        assistant_message=MessageResponse.model_validate(asst_msg),
+    )
 
 
 @router.websocket("/sessions/{session_id}/stream")

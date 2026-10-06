@@ -1,8 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel
-import chromadb
-from chromadb.config import Settings as ChromaSettings
 
 from app.config import settings
 from app.core.exceptions import StorageException
@@ -45,19 +43,34 @@ class BaseVectorStore(ABC):
         pass
 
 
+class EmptyVectorStore(BaseVectorStore):
+    """No-op store used when ChromaDB is unavailable so the API can still boot."""
+
+    def upsert(self, ids, vectors, documents, metadatas) -> None:
+        logger.warning("EmptyVectorStore: upsert skipped (vector DB unavailable)")
+
+    def query(self, query_vector, top_k: int = 4) -> List[VectorQueryResult]:
+        return []
+
+    def delete_by_document_id(self, document_id: str) -> None:
+        logger.warning("EmptyVectorStore: delete skipped (vector DB unavailable)")
+
+
 class ChromaVectorStore(BaseVectorStore):
     """ChromaDB implementation of the VectorStore abstraction."""
 
     COLLECTION_NAME = "eduvault_chunks"
 
     def __init__(self):
-        self.client = self._init_client()
+        import chromadb
+
+        self.client = self._init_client(chromadb)
         self.collection = self.client.get_or_create_collection(
             name=self.COLLECTION_NAME,
             metadata={"hnsw:space": "cosine"},
         )
 
-    def _init_client(self):
+    def _init_client(self, chromadb):
         """Initializes ChromaDB HTTP client with graceful fallback to PersistentClient."""
         try:
             # Try connecting to external ChromaDB service
@@ -188,14 +201,18 @@ class PgVectorStore(BaseVectorStore):
 def get_vector_store() -> BaseVectorStore:
     """Factory selecting the vector store backend based on settings.VECTOR_DB."""
     db_choice = settings.VECTOR_DB.lower()
-    if db_choice == "chromadb":
-        return ChromaVectorStore()
-    elif db_choice == "qdrant":
-        return QdrantVectorStore()
-    elif db_choice == "pgvector":
-        return PgVectorStore()
-    else:
-        raise StorageException(f"Unsupported VECTOR_DB choice: {settings.VECTOR_DB}")
+    try:
+        if db_choice == "chromadb":
+            return ChromaVectorStore()
+        elif db_choice == "qdrant":
+            return QdrantVectorStore()
+        elif db_choice == "pgvector":
+            return PgVectorStore()
+        else:
+            raise StorageException(f"Unsupported VECTOR_DB choice: {settings.VECTOR_DB}")
+    except Exception as e:
+        logger.warning(f"Vector store init failed ({e}). Using EmptyVectorStore fallback.")
+        return EmptyVectorStore()
 
 
 # Singleton instance
