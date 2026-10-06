@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Home,
   MessageSquare,
   FileText,
   Users,
@@ -17,6 +18,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { useState } from "react";
 
 const mainNavItems = [
+  {
+    label: "Home",
+    href: "/",
+    icon: Home,
+  },
   {
     label: "Chat",
     href: "/chat",
@@ -56,7 +62,10 @@ export function Sidebar() {
       )}
     >
       {/* Logo */}
-      <div className="flex items-center gap-3 px-4 h-16 border-b border-border">
+      <Link
+        href="/"
+        className="flex items-center gap-3 px-4 h-16 border-b border-border hover:bg-surface-tertiary/40 transition-colors"
+      >
         <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-accent">
           <GraduationCap className="w-5 h-5 text-text-inverse" />
         </div>
@@ -65,13 +74,16 @@ export function Sidebar() {
             EduVault
           </span>
         )}
-      </div>
+      </Link>
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {/* Main nav */}
         {mainNavItems.map((item) => {
-          const isActive = pathname.startsWith(item.href);
+          const isActive =
+            item.href === "/"
+              ? pathname === "/"
+              : pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
