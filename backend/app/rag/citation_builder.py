@@ -14,6 +14,7 @@ class CitationBuilder:
         for chunk in chunks:
             meta = chunk.metadata or {}
             doc_name = meta.get("file_name") or "Unknown Document"
+            doc_id = meta.get("doc_id")
             page_val = meta.get("page")
             try:
                 page = int(page_val) if page_val is not None and str(page_val).strip() != "" else None
@@ -22,6 +23,7 @@ class CitationBuilder:
 
             section = meta.get("section") or None
             chunk_id = meta.get("chunk_id") or chunk.id
+            snippet = chunk.text
 
             key = (doc_name, page, section)
             if key not in seen:
@@ -29,9 +31,11 @@ class CitationBuilder:
                 citations.append(
                     CitationItem(
                         document_name=doc_name,
+                        doc_id=doc_id,
                         page=page,
                         section=section,
                         chunk_id=chunk_id,
+                        snippet=snippet,
                     )
                 )
 

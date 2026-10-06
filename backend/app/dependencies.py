@@ -12,18 +12,22 @@ from app.db.session import get_db
 
 async def get_current_user(
     authorization: Optional[str] = Header(default=None),
+    token: Optional[str] = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    """Validates the Bearer JWT token from the Authorization header and returns the User."""
-    if not authorization:
+    """Validates the Bearer JWT token from Authorization header or query parameter and returns the User."""
+    jwt_token = None
+    if authorization:
+        parts = authorization.split()
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            jwt_token = parts[1]
+        else:
+            raise AuthenticationException("Invalid authorization header format. Must be 'Bearer <token>'")
+    elif token:
+        jwt_token = token
+    else:
         raise AuthenticationException("Authorization header is missing")
-
-    parts = authorization.split()
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise AuthenticationException("Invalid authorization header format. Must be 'Bearer <token>'")
-
-    token = parts[1]
-    payload = decode_token(token)
+    payload = decode_token(jwt_token)
     user_id_str = payload.get("sub")
     if not user_id_str:
         raise AuthenticationException("Invalid token payload: missing sub")

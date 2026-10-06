@@ -4,18 +4,23 @@ import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils";
 import { CitationBadge } from "./CitationBadge";
 import { User, Bot } from "lucide-react";
-import type { Message } from "@/types/chat";
+import type { Message, Citation } from "@/types/chat";
 
 interface MessageBubbleProps {
   message: Message;
+  onCitationClick?: (citation: Citation) => void;
   className?: string;
 }
 
 /**
- * Renders a single chat message with markdown content and citation badges.
+ * Renders a single chat message with content and interactive citation badges.
  * User messages align right, assistant messages align left.
  */
-export function MessageBubble({ message, className }: MessageBubbleProps) {
+export function MessageBubble({
+  message,
+  onCitationClick,
+  className,
+}: MessageBubbleProps) {
   const isUser = message.role === "user";
 
   return (
@@ -53,17 +58,20 @@ export function MessageBubble({ message, className }: MessageBubbleProps) {
               : "bg-surface-secondary border border-border text-text-primary rounded-tl-md"
           )}
         >
-          {/* Render content as plain text (react-markdown can be added later) */}
           <div className="whitespace-pre-wrap break-words">
             {message.content}
           </div>
         </div>
 
         {/* Citations */}
-        {message.citations.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 px-1">
+        {message.citations && message.citations.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 px-1 pt-1">
             {message.citations.map((citation, idx) => (
-              <CitationBadge key={idx} citation={citation} />
+              <CitationBadge
+                key={idx}
+                citation={citation}
+                onClick={onCitationClick}
+              />
             ))}
           </div>
         )}

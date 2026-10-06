@@ -112,6 +112,12 @@ class DocumentService:
         return doc
 
     @staticmethod
+    async def get_document_file(db: AsyncSession, doc_id: uuid.UUID) -> Tuple[bytes, str, str]:
+        doc = await DocumentService.get_document(db, doc_id)
+        file_bytes = object_store.get(doc.storage_path)
+        return file_bytes, doc.mime_type, doc.file_name
+
+    @staticmethod
     async def delete_document(db: AsyncSession, doc_id: uuid.UUID) -> None:
         doc = await DocumentService.get_document(db, doc_id)
 

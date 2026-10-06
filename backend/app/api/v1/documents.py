@@ -1,6 +1,6 @@
 import uuid
 from typing import Optional
-from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import User
@@ -70,6 +70,27 @@ async def get_document(
     """Returns full metadata for the specified document."""
     doc = await DocumentService.get_document(db, document_id)
     return DocumentResponse.model_validate(doc)
+
+
+@router.get(
+    "/{document_id}/file",
+    summary="Download or stream the raw document file (PDF, etc.) for viewing",
+)
+async def get_document_file(
+    document_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Streams document file content for in-browser PDF viewing and visual highlighting."""
+    file_bytes, mime_type, file_name = await DocumentService.get_document_file(db, document_id)
+    return Response(
+        content=file_bytes,
+        media_type=mime_type or "application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{file_name}"',
+            "Content-Type": mime_type or "application/pdf",
+        },
+    )
 
 
 @router.get(
