@@ -1,19 +1,4 @@
 import uuid
-<<<<<<< HEAD
-from datetime import datetime
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey
-from app.db.base import Base
-
-
-class Feedback(Base):
-    __tablename__ = "feedback"
-
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    message_id = Column(String(36), ForeignKey("messages.id", ondelete="CASCADE"), nullable=False, index=True)
-    rating = Column(String(20), nullable=False)  # positive | negative
-    comment = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-=======
 from datetime import datetime, timezone
 from typing import Optional, TYPE_CHECKING
 from sqlalchemy import SmallInteger, Text, DateTime, ForeignKey, CheckConstraint, Uuid
@@ -72,4 +57,3 @@ class Feedback(Base):
         "User",
         back_populates="feedbacks",
     )
->>>>>>> 39ca26fcc1552ae7b4fa3efb7e2fc61729f97070

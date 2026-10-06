@@ -1,10 +1,4 @@
 import uuid
-<<<<<<< HEAD
-from datetime import datetime
-from sqlalchemy import Column, String, Integer, DateTime
-from app.db.base import Base
-
-=======
 from datetime import datetime, timezone
 from typing import List, TYPE_CHECKING
 from sqlalchemy import String, Integer, DateTime, ForeignKey, Uuid
@@ -16,20 +10,10 @@ if TYPE_CHECKING:
     from app.db.models.user import User
     from app.db.models.chunk import DocumentChunk
 
->>>>>>> 39ca26fcc1552ae7b4fa3efb7e2fc61729f97070
 
 class Document(Base):
     __tablename__ = "documents"
 
-<<<<<<< HEAD
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    filename = Column(String(255), nullable=False)
-    file_type = Column(String(50), nullable=False)  # pdf, docx, txt, csv
-    size_bytes = Column(Integer, default=0, nullable=False)
-    chunk_count = Column(Integer, default=0, nullable=False)
-    status = Column(String(50), default="pending", nullable=False)  # pending | processing | indexed | failed
-    uploaded_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-=======
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
         primary_key=True,
@@ -78,4 +62,3 @@ class Document(Base):
         back_populates="document",
         cascade="all, delete-orphan",
     )
->>>>>>> 39ca26fcc1552ae7b4fa3efb7e2fc61729f97070

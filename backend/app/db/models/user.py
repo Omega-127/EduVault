@@ -1,10 +1,4 @@
 import uuid
-<<<<<<< HEAD
-from datetime import datetime
-from sqlalchemy import Column, String, Boolean, DateTime
-from app.db.base import Base
-
-=======
 from datetime import datetime, timezone
 from typing import List, TYPE_CHECKING
 from sqlalchemy import String, Boolean, DateTime, Uuid
@@ -17,19 +11,10 @@ if TYPE_CHECKING:
     from app.db.models.chat_session import ChatSession
     from app.db.models.feedback import Feedback
 
->>>>>>> 39ca26fcc1552ae7b4fa3efb7e2fc61729f97070
 
 class User(Base):
     __tablename__ = "users"
 
-<<<<<<< HEAD
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    email = Column(String(255), unique=True, index=True, nullable=False)
-    hashed_password = Column(String(255), nullable=False)
-    role = Column(String(50), default="student", nullable=False)  # student | faculty | admin
-    is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-=======
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
         primary_key=True,
@@ -77,4 +62,3 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
->>>>>>> 39ca26fcc1552ae7b4fa3efb7e2fc61729f97070
