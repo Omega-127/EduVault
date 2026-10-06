@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { SessionSidebar } from "@/components/chat/SessionSidebar";
 import { ChatWindow } from "@/components/chat/ChatWindow";
 import { useChat, useChatSessions } from "@/hooks/useChat";
+import { useDocuments } from "@/hooks/useDocuments";
 
 /**
  * Active chat session page.
@@ -24,6 +26,21 @@ export default function ChatSessionPage() {
     ask,
     clearError,
   } = useChat(sessionId);
+
+  const { uploadDocument, isUploading: isUploadingDoc } = useDocuments();
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+
+  const handleAttachFile = async (file: File) => {
+    setUploadStatus(`Uploading "${file.name}" to knowledge base...`);
+    const res = await uploadDocument(file);
+    if (res) {
+      setUploadStatus(`"${file.name}" uploaded successfully! Indexing into knowledge base...`);
+      setTimeout(() => setUploadStatus(null), 5000);
+    } else {
+      setUploadStatus(`Failed to upload "${file.name}". (Uploads require Admin permissions)`);
+      setTimeout(() => setUploadStatus(null), 6000);
+    }
+  };
 
   const handleCreateSession = async () => {
     try {
@@ -54,6 +71,9 @@ export default function ChatSessionPage() {
             isLoadingHistory={isLoadingHistory}
             error={error}
             onSend={ask}
+            onAttachFile={handleAttachFile}
+            isUploadingFile={isUploadingDoc}
+            uploadStatusMessage={uploadStatus}
             onClearError={clearError}
           />
         </div>

@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { Send, Paperclip } from "lucide-react";
+import { useState, useRef, useEffect, ChangeEvent } from "react";
+import { Send, Paperclip, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface InputBarProps {
   onSend: (message: string) => void;
+  onAttachFile?: (file: File) => void;
+  isUploadingFile?: boolean;
   isDisabled?: boolean;
   isStreaming?: boolean;
   placeholder?: string;
@@ -13,11 +15,13 @@ interface InputBarProps {
 }
 
 /**
- * Chat input bar with auto-resize textarea, send button, and keyboard shortcut.
+ * Chat input bar with auto-resize textarea, send button, attachment button, and keyboard shortcut.
  * Enter sends the message, Shift+Enter adds a new line.
  */
 export function InputBar({
   onSend,
+  onAttachFile,
+  isUploadingFile = false,
   isDisabled = false,
   isStreaming = false,
   placeholder = "Ask a question about university policies...",
@@ -25,6 +29,7 @@ export function InputBar({
 }: InputBarProps) {
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-resize the textarea
   useEffect(() => {
@@ -55,6 +60,17 @@ export function InputBar({
     }
   };
 
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && onAttachFile) {
+      onAttachFile(file);
+    }
+    // Reset file input so the same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   return (
     <div
       className={cn(
@@ -62,15 +78,33 @@ export function InputBar({
         className
       )}
     >
-      {/* Attachment button (future) */}
+      {/* Hidden file input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        className="hidden"
+        accept=".pdf,.docx,.txt,.csv"
+        onChange={handleFileChange}
+      />
+
+      {/* Attachment button */}
       <button
-        className="flex-shrink-0 p-2.5 rounded-lg text-text-muted
-                   hover:text-text-primary hover:bg-surface-tertiary
-                   transition-colors duration-200"
-        title="Attach file"
-        disabled
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={isDisabled || isUploadingFile}
+        className={cn(
+          "flex-shrink-0 p-2.5 rounded-lg transition-colors duration-200",
+          isUploadingFile
+            ? "text-accent bg-accent/10 cursor-wait"
+            : "text-text-muted hover:text-text-primary hover:bg-surface-tertiary cursor-pointer"
+        )}
+        title="Upload knowledge document (PDF, DOCX, TXT, CSV)"
       >
-        <Paperclip className="w-5 h-5" />
+        {isUploadingFile ? (
+          <Loader2 className="w-5 h-5 animate-spin" />
+        ) : (
+          <Paperclip className="w-5 h-5" />
+        )}
       </button>
 
       {/* Text input */}

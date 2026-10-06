@@ -17,6 +17,9 @@ interface ChatWindowProps {
   isLoadingHistory: boolean;
   error: string | null;
   onSend: (message: string) => void;
+  onAttachFile?: (file: File) => void;
+  isUploadingFile?: boolean;
+  uploadStatusMessage?: string | null;
   onClearError?: () => void;
   onCitationClick?: (citation: Citation) => void;
   className?: string;
@@ -32,6 +35,9 @@ export function ChatWindow({
   isLoadingHistory,
   error,
   onSend,
+  onAttachFile,
+  isUploadingFile = false,
+  uploadStatusMessage = null,
   onClearError,
   onCitationClick,
   className,
@@ -177,10 +183,24 @@ export function ChatWindow({
             </div>
           </div>
         )}
+
+        {/* Upload status message */}
+        {uploadStatusMessage && (
+          <div className="flex items-center justify-center">
+            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-accent/10 border border-accent/20 text-accent text-sm animate-slide-up">
+              <span>{uploadStatusMessage}</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Input bar */}
-      <InputBar onSend={onSend} isStreaming={streaming.isStreaming} />
+      <InputBar
+        onSend={onSend}
+        onAttachFile={onAttachFile}
+        isUploadingFile={isUploadingFile}
+        isStreaming={streaming.isStreaming}
+      />
 
       {/* Interactive PDF Citation Drawer & Visual Highlighter */}
       <CitationDrawer

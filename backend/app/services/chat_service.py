@@ -176,4 +176,12 @@ class ChatService:
 
             except Exception as e:
                 logger.error(f"Error during WebSocket streaming: {e}")
+                try:
+                    await websocket.send_json({
+                        "type": "error",
+                        "data": f"Error generating answer: {str(e)}",
+                    })
+                    await websocket.send_json({"type": "done"})
+                except Exception:
+                    pass
                 break

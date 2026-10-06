@@ -75,13 +75,15 @@ class DocumentService:
         await db.commit()
         await db.refresh(doc)
 
-        # Dispatch Celery ingestion task asynchronously
+        # Dispatch Celery ingestion task asynchronously, with asyncio fallback
         try:
             ingest_document.delay(str(doc.id))
             logger.info(f"Dispatched Celery ingestion task for document {doc.id}")
         except Exception as e:
-            logger.warning(f"Could not dispatch Celery task via broker ({e}). Running in background fallback or queued.")
-            # Note: Celery may be offline in standalone test mode; status remains pending
+            logger.warning(f"Could not dispatch Celery task via broker ({e}). Running in background task fallback.")
+            import asyncio
+            from app.ingestion.tasks import _async_ingest_document
+            asyncio.create_task(_async_ingest_document(str(doc.id)))
 
         return doc
 

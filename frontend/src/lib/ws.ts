@@ -58,10 +58,13 @@ export function createChatSocket(
   };
 
   ws.onerror = () => {
-    callbacks.onError("WebSocket connection error");
+    callbacks.onError("WebSocket connection failed. Please ensure the backend server is running on port 8000.");
   };
 
-  ws.onclose = () => {
+  ws.onclose = (event) => {
+    if (!event.wasClean && event.code !== 1000) {
+      callbacks.onError("WebSocket disconnected from backend server.");
+    }
     callbacks.onClose?.();
   };
 

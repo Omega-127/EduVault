@@ -30,7 +30,7 @@ class ObjectStore:
         )
 
     def ensure_bucket_exists(self) -> None:
-        """Verifies or creates the target bucket if it doesn't already exist."""
+        """Verifies or creates the target bucket if it doesn't already exist, or initializes local upload dir."""
         try:
             self.s3_client.head_bucket(Bucket=self.bucket_name)
         except ClientError as e:
@@ -43,9 +43,17 @@ class ObjectStore:
                     logger.warning(f"Failed to create bucket {self.bucket_name}: {create_err}")
             else:
                 logger.warning(f"Bucket check returned: {e}")
+        except Exception as e:
+            logger.info(f"Remote object store not reachable ({e}). Using local filesystem at {settings.UPLOAD_DIR}")
+            import os
+            os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+
+    def _local_path(self, key: str) -> str:
+        import os
+        return os.path.join(settings.UPLOAD_DIR, key.replace("/", os.sep))
 
     def put(self, key: str, data: bytes, content_type: str = "application/octet-stream") -> str:
-        """Uploads a byte buffer to the object store at the designated key."""
+        """Uploads a byte buffer to the object store, with graceful fallback to local storage."""
         try:
             self.s3_client.put_object(
                 Bucket=self.bucket_name,
@@ -53,14 +61,24 @@ class ObjectStore:
                 Body=data,
                 ContentType=content_type,
             )
-            logger.info(f"Successfully stored object: {key} ({len(data)} bytes)")
+            logger.info(f"Successfully stored object in S3/MinIO: {key} ({len(data)} bytes)")
             return key
         except Exception as e:
-            logger.error(f"Failed to upload object {key} to {self.bucket_name}: {e}")
-            raise StorageException(f"Failed to store file in object storage: {str(e)}")
+            logger.warning(f"MinIO/S3 unavailable ({e}). Storing file locally on disk: {key}")
+            try:
+                import os
+                local_file = self._local_path(key)
+                os.makedirs(os.path.dirname(local_file), exist_ok=True)
+                with open(local_file, "wb") as f:
+                    f.write(data)
+                logger.info(f"Successfully stored object locally: {local_file} ({len(data)} bytes)")
+                return key
+            except Exception as local_err:
+                logger.error(f"Failed to store file locally: {local_err}")
+                raise StorageException(f"Failed to store file in object storage or local disk: {str(local_err)}")
 
     def get(self, key: str) -> bytes:
-        """Fetches object content as raw bytes from the designated key."""
+        """Fetches object content as raw bytes from S3/MinIO or local filesystem."""
         try:
             response = self.s3_client.get_object(
                 Bucket=self.bucket_name,
@@ -68,21 +86,40 @@ class ObjectStore:
             )
             return response["Body"].read()
         except Exception as e:
-            logger.error(f"Failed to retrieve object {key} from {self.bucket_name}: {e}")
+            # Fallback to local filesystem
+            import os
+            local_file = self._local_path(key)
+            if os.path.exists(local_file):
+                logger.info(f"Reading object from local disk: {local_file}")
+                with open(local_file, "rb") as f:
+                    return f.read()
+            logger.error(f"Failed to retrieve object {key} from S3/MinIO and local disk: {e}")
             raise StorageException(f"Failed to fetch file from object storage: {str(e)}")
 
     def delete(self, key: str) -> bool:
-        """Removes the object at the specified key."""
+        """Removes the object at the specified key from S3/MinIO and local filesystem."""
+        deleted = False
         try:
             self.s3_client.delete_object(
                 Bucket=self.bucket_name,
                 Key=key,
             )
-            logger.info(f"Successfully deleted object: {key}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to delete object {key} from {self.bucket_name}: {e}")
-            raise StorageException(f"Failed to delete file from object storage: {str(e)}")
+            logger.info(f"Successfully deleted object from S3: {key}")
+            deleted = True
+        except Exception:
+            pass
+
+        import os
+        local_file = self._local_path(key)
+        if os.path.exists(local_file):
+            try:
+                os.remove(local_file)
+                logger.info(f"Successfully deleted local file: {local_file}")
+                deleted = True
+            except Exception as e:
+                logger.warning(f"Could not delete local file {local_file}: {e}")
+
+        return deleted
 
 
 # Singleton instance

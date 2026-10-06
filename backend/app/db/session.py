@@ -4,11 +4,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.config import settings
 
 # Create async engine for PostgreSQL (or SQLite for testing/fallback if configured)
+is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+connect_args = {"check_same_thread": False} if is_sqlite else {}
+
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
     future=True,
     pool_pre_ping=True,
+    connect_args=connect_args,
 )
 
 AsyncSessionLocal = async_sessionmaker(

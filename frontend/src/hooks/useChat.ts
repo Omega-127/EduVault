@@ -42,14 +42,24 @@ export function useChat(sessionId: string | null) {
 
   /** Connect WebSocket for streaming */
   const connect = useCallback(() => {
-    if (!sessionId || !accessToken) return;
+    const token =
+      accessToken ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("access_token")
+        : null);
+
+    if (!sessionId) return;
+    if (!token) {
+      setError("Please log in to chat with EduVault.");
+      return;
+    }
 
     // Close existing connection
     if (wsRef.current) {
       wsRef.current.close();
     }
 
-    const ws = createChatSocket(sessionId, accessToken, {
+    const ws = createChatSocket(sessionId, token, {
       onToken: (text) => {
         setStreaming((prev) => ({
           ...prev,
@@ -93,17 +103,31 @@ export function useChat(sessionId: string | null) {
       },
     });
 
-    ws.onopen = () => setIsConnected(true);
+    ws.onopen = () => {
+      setIsConnected(true);
+      setError(null);
+    };
     wsRef.current = ws;
   }, [sessionId, accessToken]);
 
   /** Send a question */
   const ask = useCallback(
     (question: string) => {
+      const token =
+        accessToken ||
+        (typeof window !== "undefined"
+          ? localStorage.getItem("access_token")
+          : null);
+
+      if (!token) {
+        setError("You must be logged in to send messages. Please log in at /login.");
+        return;
+      }
+
       if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
         // Attempt to reconnect
         connect();
-        // Queue the message to send after connection
+        // Queue the message to send after connection attempt
         setTimeout(() => {
           if (wsRef.current?.readyState === WebSocket.OPEN) {
             const userMessage: Message = {
@@ -117,8 +141,13 @@ export function useChat(sessionId: string | null) {
             setMessages((prev) => [...prev, userMessage]);
             sendQuestion(wsRef.current!, question);
             setStreaming({ content: "", citations: [], isStreaming: true });
+            setError(null);
+          } else {
+            setError(
+              "Unable to connect to the backend server. Please verify the FastAPI backend is running on port 8000."
+            );
           }
-        }, 500);
+        }, 800);
         return;
       }
 
@@ -136,7 +165,7 @@ export function useChat(sessionId: string | null) {
       setStreaming({ content: "", citations: [], isStreaming: true });
       setError(null);
     },
-    [sessionId, connect]
+    [sessionId, accessToken, connect]
   );
 
   /** Load history and connect on mount */
