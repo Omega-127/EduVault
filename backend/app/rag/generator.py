@@ -98,7 +98,7 @@ class RAGGenerator:
         words = answer_text.split(" ")
         for i, word in enumerate(words):
             yield word + (" " if i < len(words) - 1 else "")
-            await asyncio.sleep(0.02)
+            await asyncio.sleep(0)
 
 
 generator = RAGGenerator()

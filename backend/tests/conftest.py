@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 # Set testing environment variables before importing app
 os.environ["APP_ENV"] = "testing"
 os.environ["SECRET_KEY"] = "test-secret-key-for-eduvault-testing-purposes-min-32-chars"
-os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
+TEST_DB_URL = "sqlite+aiosqlite:///file:testdb?mode=memory&cache=shared&uri=true"
+os.environ["DATABASE_URL"] = TEST_DB_URL
 
 from app.core.security import create_access_token, get_password_hash
 from app.db.base import Base
@@ -19,11 +20,15 @@ from app.db.session import get_db
 from app.main import app
 
 
-# Test database engine
+from sqlalchemy.pool import StaticPool
+
+# Test database engine with shared in-memory database so all threads/sessions share the same schema
 test_engine = create_async_engine(
-    "sqlite+aiosqlite:///:memory:",
+    TEST_DB_URL,
     echo=False,
     future=True,
+    poolclass=StaticPool,
+    connect_args={"check_same_thread": False},
 )
 
 TestingSessionLocal = async_sessionmaker(
@@ -32,6 +37,11 @@ TestingSessionLocal = async_sessionmaker(
     expire_on_commit=False,
     autoflush=False,
 )
+
+# Patch global app session to use test engine during tests
+import app.db.session as app_session
+app_session.engine = test_engine
+app_session.AsyncSessionLocal = TestingSessionLocal
 
 
 @pytest_asyncio.fixture(scope="session")

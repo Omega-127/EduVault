@@ -1,12 +1,13 @@
 import uuid
 import pytest
+import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ChatSession, Message, User
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def sample_message(db_session: AsyncSession, student_user: User) -> Message:
     session = ChatSession(
         id=uuid.uuid4(),
