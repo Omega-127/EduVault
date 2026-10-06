@@ -159,3 +159,75 @@
     @apply bg-surface-tertiary rounded animate-pulse;
   }
 }
+
+/* Landing — hero entrance + scroll reveals */
+.landing-hero-atmosphere {
+  background:
+    radial-gradient(ellipse 80% 55% at 15% 20%, rgba(16, 185, 129, 0.12), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 90% 10%, rgba(55, 65, 81, 0.45), transparent 50%),
+    linear-gradient(180deg, #111827 0%, #0f172a 48%, #111827 100%);
+}
+
+.landing-hero-copy {
+  animation: landingRise 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.landing-hero-media {
+  animation: landingRise 1.05s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+}
+
+@keyframes landingRise {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.reveal-base {
+  --reveal-delay: 0ms;
+  opacity: 0;
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay);
+  will-change: opacity, transform;
+}
+
+.reveal-up {
+  transform: translateY(36px);
+}
+
+.reveal-fade {
+  transform: none;
+}
+
+.reveal-left {
+  transform: translateX(-28px);
+}
+
+.reveal-right {
+  transform: translateX(28px);
+}
+
+.reveal-scale {
+  transform: scale(0.97) translateY(16px);
+}
+
+.reveal-base.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-hero-copy,
+  .landing-hero-media,
+  .reveal-base {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
