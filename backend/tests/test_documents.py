@@ -100,3 +100,31 @@ async def test_delete_document_success(client: AsyncClient, admin_auth_headers: 
             headers=admin_auth_headers,
         )
         assert get_res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_document_file(client: AsyncClient, admin_auth_headers: dict):
+    sample_pdf = b"%PDF-1.4 test document content for citation viewer"
+    files = {"file": ("manual.pdf", io.BytesIO(sample_pdf), "application/pdf")}
+
+    with patch("app.storage.object_store.object_store.put", return_value="raw/test/manual.pdf"), \
+         patch("app.storage.object_store.object_store.ensure_bucket_exists"), \
+         patch("app.storage.object_store.object_store.get", return_value=sample_pdf), \
+         patch("app.ingestion.tasks.ingest_document.delay"):
+
+        create_res = await client.post(
+            "/api/v1/documents/upload",
+            headers=admin_auth_headers,
+            files=files,
+        )
+        doc_id = create_res.json()["id"]
+
+        # Fetch file bytes
+        file_res = await client.get(
+            f"/api/v1/documents/{doc_id}/file",
+            headers=admin_auth_headers,
+        )
+        assert file_res.status_code == 200
+        assert file_res.content == sample_pdf
+        assert file_res.headers["content-type"] == "application/pdf"
+        assert 'inline; filename="manual.pdf"' in file_res.headers["content-disposition"]

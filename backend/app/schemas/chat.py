@@ -20,9 +20,11 @@ class SessionResponse(BaseModel):
 
 class CitationItem(BaseModel):
     document_name: str
+    doc_id: Optional[str] = None
     page: Optional[int] = None
     section: Optional[str] = None
     chunk_id: Optional[str] = None
+    snippet: Optional[str] = None
 
 
 class MessageResponse(BaseModel):

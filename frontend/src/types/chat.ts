@@ -4,9 +4,11 @@
 
 export interface Citation {
   document_name: string;
+  doc_id?: string | null;
   page: number | null;
   section: string | null;
-  chunk_id?: string;
+  chunk_id?: string | null;
+  snippet?: string | null;
 }
 
 export interface Message {
