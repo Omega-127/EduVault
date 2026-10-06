@@ -54,6 +54,12 @@ class IngestionException(EduVaultException):
         super().__init__(message=message, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class RAGException(EduVaultException):
+    """Raised when retrieval or generation pipeline encounters an error."""
+    def __init__(self, message: str = "RAG processing error"):
+        super().__init__(message=message, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     """Registers standard exception handlers on the FastAPI application."""
 
