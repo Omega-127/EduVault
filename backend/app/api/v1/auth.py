@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
@@ -13,10 +14,27 @@ from app.core.security import (
     create_refresh_token,
     decode_token,
 )
+=======
+from typing import Optional
+from fastapi import APIRouter, Cookie, Depends, Response, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import settings
+from app.core.exceptions import AuthenticationException
+from app.db.session import get_db
+from app.schemas.auth import (
+    TokenResponse,
+    UserLoginRequest,
+    UserRegisterRequest,
+    UserResponse,
+)
+from app.services.auth_service import AuthService
+>>>>>>> 39ca26fcc1552ae7b4fa3efb7e2fc61729f97070
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
+<<<<<<< HEAD
 class RegisterSchema(BaseModel):
     email: EmailStr
     password: str
@@ -46,10 +64,42 @@ class AuthResponse(BaseModel):
 
 
 def set_refresh_cookie(response: Response, refresh_token: str):
+=======
+@router.post(
+    "/register",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register a new user account",
+)
+async def register(
+    request: UserRegisterRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Registers a new student, faculty, or admin user."""
+    user = await AuthService.register_user(db, request)
+    return user
+
+
+@router.post(
+    "/login",
+    response_model=TokenResponse,
+    summary="Authenticate and obtain JWT access & refresh tokens",
+)
+async def login(
+    request: UserLoginRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
+    """Authenticates user credentials and sets an HTTP-only cookie with the refresh token."""
+    user, access_token, refresh_token = await AuthService.authenticate_user(db, request)
+
+    # Set secure HTTP-only refresh token cookie
+>>>>>>> 39ca26fcc1552ae7b4fa3efb7e2fc61729f97070
     response.set_cookie(
         key="refresh_token",
         value=refresh_token,
         httponly=True,
+<<<<<<< HEAD
         secure=True,
         samesite="lax",
         max_age=7 * 24 * 3600,
@@ -156,3 +206,37 @@ async def get_me(current_user: User = Depends(get_current_user)):
 async def logout(response: Response):
     response.delete_cookie(key="refresh_token")
     return {"message": "Logged out successfully"}
+=======
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
+        samesite="lax",
+        secure=settings.APP_ENV == "production",
+    )
+
+    return TokenResponse(
+        access_token=access_token,
+        token_type="bearer",
+        user=UserResponse.model_validate(user),
+    )
+
+
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    summary="Rotate JWT access token using HTTP-only refresh cookie",
+)
+async def refresh_token(
+    refresh_token: Optional[str] = Cookie(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Rotates the access token using the HTTP-only refresh token cookie."""
+    if not refresh_token:
+        raise AuthenticationException("Refresh token cookie is missing")
+
+    user, access_token = await AuthService.refresh_access_token(db, refresh_token)
+
+    return TokenResponse(
+        access_token=access_token,
+        token_type="bearer",
+        user=UserResponse.model_validate(user),
+    )
+>>>>>>> 39ca26fcc1552ae7b4fa3efb7e2fc61729f97070
