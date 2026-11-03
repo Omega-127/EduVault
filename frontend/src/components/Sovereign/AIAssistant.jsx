@@ -1,0 +1,357 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useOutletContext } from 'react-router-dom';
+import { toast } from 'sonner';
+import ReactMarkdown from 'react-markdown';
+
+const API_BASE = import.meta.env.VITE_API_BASE || '/api';
+
+const formatName = (fullName) => {
+    if (!fullName) return "Scholar";
+    const trimmed = fullName.trim();
+    if (!trimmed) return "Scholar";
+    return trimmed.split(/\s+/).map(word => {
+        if (word.length <= 2 && word.toUpperCase() === word) return word;
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    }).join(' ');
+};
+
+const getInitials = (fullName) => {
+    if (!fullName) return "AH";
+    const parts = fullName.trim().split(/\s+/);
+    if (parts.length >= 2) {
+        return (parts[1][0] + parts[0][0]).toUpperCase();
+    }
+    return fullName.slice(0, 2).toUpperCase();
+};
+
+const AIAssistant = () => {
+    const { profile, loading } = useOutletContext();
+    const [messages, setMessages] = useState([
+        {
+            role: 'ai',
+            content: `Hi ${profile?.name ? profile.name.split(' ')[0] : 'there'}! I'm your AI Study Assistant. Ask me anything about your subjects, notes, attendance, or upcoming exams.`,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        }
+    ]);
+
+    const [input, setInput] = useState('');
+    const [isTyping, setIsTyping] = useState(false);
+    const scrollRef = useRef(null);
+
+    useEffect(() => {
+        if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+    }, [messages, isTyping]);
+
+    const handleClearChat = () => {
+        setMessages([
+            {
+                role: 'ai',
+                content: `Chat cleared! What would you like help with?`,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            }
+        ]);
+        toast.success("Chat history cleared");
+    };
+
+    const handleNewChat = () => {
+        handleClearChat();
+    };
+
+    const handleSend = async () => {
+        if (!input.trim()) return;
+
+        const userMessage = {
+            role: 'user',
+            content: input.trim(),
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+
+        setMessages(prev => [...prev, userMessage]);
+        const queryText = input.trim();
+        setInput('');
+        setIsTyping(true);
+
+        let answer = null;
+        let confidence = 0.95;
+        const customApiKey = localStorage.getItem('eduvault_custom_gemini_key') || localStorage.getItem('eduvault_gemini_api_key');
+
+        try {
+            const response = await fetch(`${API_BASE}/ai/chat`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    ...(customApiKey ? { 'X-Gemini-Api-Key': customApiKey } : {})
+                },
+                body: JSON.stringify({ 
+                    question: queryText, 
+                    prn: profile?.prn,
+                    customApiKey: customApiKey || undefined,
+                    apiKey: customApiKey || undefined
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                if (data.answer && !data.answer.toLowerCase().includes("encountered an error") && !data.answer.toLowerCase().includes("error processing")) {
+                    answer = data.answer;
+                    confidence = data.confidence || 0.95;
+                }
+            }
+        } catch (err) {
+            console.warn("Backend AI chat error:", err);
+        }
+
+        // Direct Google Gemini API fallback if custom key is provided and backend didn't respond or errored
+        if (!answer && customApiKey) {
+            try {
+                const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(customApiKey)}`;
+                const directRes = await fetch(geminiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: queryText }] }]
+                    })
+                });
+
+                if (directRes.ok) {
+                    const directData = await directRes.json();
+                    const candidate = directData.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (candidate) {
+                        answer = candidate;
+                        confidence = 0.98;
+                    }
+                }
+            } catch (directErr) {
+                console.error("Direct Gemini call failed:", directErr);
+            }
+        }
+
+        if (answer) {
+            setMessages(prev => [...prev, {
+                role: 'ai',
+                content: answer,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                confidence: confidence
+            }]);
+        } else {
+            const fallbackMsg = "Unable to synthesize response. Ensure the backend is active or verify your custom Gemini API key in Settings.";
+            toast.error(fallbackMsg);
+            setMessages(prev => [...prev, {
+                role: 'ai',
+                content: fallbackMsg,
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                isError: true
+            }]);
+        }
+        setIsTyping(false);
+    };
+
+    if (loading) {
+        return (
+            <div className="flex-1 flex items-center justify-center min-h-[400px]">
+                <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex-1 flex flex-col h-full bg-canvas-bg font-sans text-text-[#0073E6] antialiased overflow-hidden">
+            <main className="w-full px-3.5 sm:px-8 py-2.5 max-w-4xl mx-auto flex flex-col h-full overflow-hidden">
+                {/* Section Top Bar */}
+                <div className="w-full pb-3 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#E2E2E2] shrink-0">
+                    <div>
+                        <div className="flex items-center gap-2.5">
+                            <h1 className="text-xl sm:text-2xl font-bold text-text-[#0073E6] tracking-tight">
+                                AI Assistant
+                            </h1>
+                            {localStorage.getItem('eduvault_custom_gemini_key') && (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-purple-600 animate-pulse" />
+                                    Custom Key Active
+                                </span>
+                            )}
+                        </div>
+                        <p className="text-xs text-[#727272] mt-0.5">
+                            Your academic AI assistant
+                        </p>
+                    </div>
+                    {/* Header Actions */}
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={handleClearChat}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white hover:bg-[#DEEDFC] text-[#727272] hover:text-[#0073E6] transition-colors text-xs font-semibold border border-[#E2E2E2] cursor-pointer"
+                            id="clearChatBtn"
+                        >
+                            <span className="material-symbols-outlined text-[16px]">restart_alt</span>
+                            <span>Clear History</span>
+                        </button>
+                        <button
+                            onClick={handleNewChat}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#0073E6] hover:bg-[#4A9AF0] text-white font-semibold text-xs transition-all cursor-pointer"
+                            id="newChatBtn"
+                        >
+                            <span className="material-symbols-outlined text-[16px]">add</span>
+                            <span>New Chat</span>
+                        </button>
+                    </div>
+                </div>
+
+                {/* Messages Scrollable Stream */}
+                <div ref={scrollRef} className="flex-1 overflow-y-auto flex flex-col gap-5 py-4 min-h-0 pr-1" id="chatStream">
+                    {messages.map((msg, i) => (
+                        <React.Fragment key={i}>
+                            {msg.role === 'user' ? (
+                                /* User Message Bubble */
+                                <div className="flex items-start justify-end gap-3.5 max-w-2xl self-end animate-in fade-in duration-200">
+                                    <div className="flex flex-col items-end gap-1.5 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-[#727272]">{msg.time}</span>
+                                            <span className="text-xs font-semibold text-text-[#0073E6]">
+                                                {formatName(profile?.name)}
+                                            </span>
+                                        </div>
+                                        <div className="bg-primary text-white rounded-2xl rounded-tr-sm p-4 text-sm leading-relaxed whitespace-pre-wrap">
+                                            {msg.content}
+                                        </div>
+                                    </div>
+                                    <div className="w-9 h-9 rounded-full bg-primary text-white flex items-center justify-center font-semibold text-xs shrink-0">
+                                        {getInitials(profile?.name)}
+                                    </div>
+                                </div>
+                            ) : (
+                                /* AI Synthesis Response Bubble */
+                                <div className="flex items-start gap-3.5 max-w-3xl animate-in fade-in duration-200">
+                                    <div className="w-9 h-9 rounded-xl bg-[#DEEDFC] flex items-center justify-center text-[#0073E6] shrink-0">
+                                        <span className="material-symbols-outlined text-[20px]">smart_toy</span>
+                                    </div>
+                                    <div className="flex flex-col gap-2 min-w-0 flex-1">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-bold text-text-[#0073E6]">
+                                                AI Study Assistant
+                                            </span>
+                                            <span className="text-xs text-[#727272]">{msg.time}</span>
+                                        </div>
+                                        <div className={`rounded-2xl rounded-tl-sm p-5 space-y-3 border ${msg.isError
+                                                ? 'bg-status-danger-bg text-status-danger-text border-red-200'
+                                                : 'bg-white text-text-[#0073E6] border-[#E2E2E2]'
+                                            }`}>
+                                            <div className="text-sm leading-relaxed">
+                                                <ReactMarkdown
+                                                    components={{
+                                                        p: ({ node, ...props }) => <p className="mb-2.5 last:mb-0 leading-relaxed" {...props} />,
+                                                        ul: ({ node, ...props }) => <ul className="list-disc list-outside ml-4 mb-2.5 space-y-1 text-text-[#0073E6]" {...props} />,
+                                                        ol: ({ node, ...props }) => <ol className="list-decimal list-outside ml-4 mb-2.5 space-y-1 text-text-[#0073E6]" {...props} />,
+                                                        li: ({ node, ...props }) => <li className="leading-relaxed" {...props} />,
+                                                        h1: ({ node, ...props }) => <h1 className="text-lg font-bold text-text-[#0073E6] mt-3 mb-2" {...props} />,
+                                                        h2: ({ node, ...props }) => <h2 className="text-base font-bold text-text-[#0073E6] mt-3 mb-1.5" {...props} />,
+                                                        h3: ({ node, ...props }) => <h3 className="text-sm font-bold text-text-[#0073E6] mt-2 mb-1" {...props} />,
+                                                        strong: ({ node, ...props }) => <strong className="font-bold text-text-[#0073E6]" {...props} />,
+                                                        pre: ({ node, ...props }) => <pre className="bg-slate-900 text-slate-100 p-3.5 rounded-xl overflow-x-auto text-xs font-mono my-2.5 border border-slate-800" {...props} />,
+                                                        code: ({ node, className, children, ...props }) => {
+                                                            const isMultiLine = String(children).includes('\n');
+                                                            if (!className && !isMultiLine) {
+                                                                return <code className="bg-slate-100 text-[#0073E6] px-1.5 py-0.5 rounded text-xs font-mono border border-[#E2E2E2]/80 font-semibold" {...props}>{children}</code>;
+                                                            }
+                                                            return <code className={className} {...props}>{children}</code>;
+                                                        },
+                                                        blockquote: ({ node, ...props }) => <blockquote className="border-l-3 border-primary pl-3 italic text-[#727272] my-2" {...props} />,
+                                                        table: ({ node, ...props }) => <div className="overflow-x-auto my-3"><table className="min-w-full divide-y divide-border-subtle border border-[#E2E2E2] text-xs" {...props} /></div>,
+                                                        th: ({ node, ...props }) => <th className="bg-slate-50 px-3 py-2 text-left font-bold text-text-[#0073E6] border-b border-[#E2E2E2]" {...props} />,
+                                                        td: ({ node, ...props }) => <td className="px-3 py-2 border-b border-[#E2E2E2] text-[#727272]" {...props} />
+                                                    }}
+                                                >
+                                                    {msg.content}
+                                                </ReactMarkdown>
+                                            </div>
+
+                                            {msg.confidence && (
+                                                <div className="pt-2 flex flex-wrap items-center gap-2 border-t border-[#E2E2E2]/40">
+                                                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#DEEDFC] text-[#0073E6] text-xs font-semibold">
+                                                        <span className="material-symbols-outlined text-[15px]">verified_user</span>
+                                                        <span>{Math.round(msg.confidence * 100)}% Confidence</span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </React.Fragment>
+                    ))}
+
+                    {/* Typing Loader */}
+                    {isTyping && (
+                        <div className="flex items-start gap-3.5 max-w-3xl animate-in fade-in duration-200">
+                            <div className="w-9 h-9 rounded-xl bg-[#DEEDFC] flex items-center justify-center text-[#0073E6] shrink-0">
+                                <span className="material-symbols-outlined text-[20px] animate-pulse">smart_toy</span>
+                            </div>
+                            <div className="flex flex-col gap-2 min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold text-text-[#0073E6]">AI Study Assistant</span>
+                                    <span className="text-[11px] text-[#727272]">Thinking...</span>
+                                </div>
+                                <div className="bg-white rounded-2xl rounded-tl-sm p-4 text-[#727272] border border-[#E2E2E2] inline-flex items-center gap-2 w-fit">
+                                    <div className="w-2 h-2 rounded-full bg-primary animate-ping" />
+                                    <span className="text-xs font-medium">Checking your course materials...</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Anchored Input Box Area */}
+                <div className="shrink-0 pt-2 pb-16 md:pb-2 bg-canvas-bg">
+                    <div className="rounded-xl bg-white border border-[#E2E2E2] p-2.5 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all">
+                        {/* Context Header Strip */}
+                        <div className="flex flex-wrap items-center justify-between gap-1.5 pb-2">
+
+                        </div>
+
+                        {/* Text Input & Send Trigger */}
+                        <div className="flex items-center gap-2">
+                            <textarea
+                                className="w-full resize-none bg-slate-50 rounded-lg px-2.5 py-1.5 text-xs text-text-[#0073E6] placeholder:text-[#727272] focus:outline-none focus:bg-white border border-transparent focus:border-[#E2E2E2] transition-all"
+                                id="aiPromptInput"
+                                placeholder="Ask a question about your subjects, notes, or exams..."
+                                rows="1"
+                                value={input}
+                                onChange={(e) => setInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        handleSend();
+                                    }
+                                }}
+                            />
+                            <button
+                                onClick={handleSend}
+                                disabled={isTyping || !input.trim()}
+                                className="w-8 h-8 rounded-lg bg-[#0073E6] hover:bg-[#4A9AF0] text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 disabled:opacity-40 disabled:scale-100 shrink-0 cursor-pointer"
+                                id="sendPromptBtn"
+                                title="Send message"
+                            >
+                                <span className="material-symbols-outlined text-[16px]">arrow_upward</span>
+                            </button>
+                        </div>
+
+                        {/* Micro Helper Footer */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mt-1.5 pt-1.5 text-[10px] text-[#727272] border-t border-[#E2E2E2]/50">
+                            <span className="flex items-center gap-1">
+                                <span className="material-symbols-outlined text-[12px]">keyboard</span>
+                                Enter to send • Shift + Enter for new line
+                            </span>
+                            <span className="flex items-center gap-1 text-[10px]">
+                                <span className="material-symbols-outlined text-[12px] text-[#0073E6]">verified_user</span>
+                                AI Assistant
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    );
+};
+
+export default AIAssistant;

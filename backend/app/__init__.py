@@ -1,1 +1,0 @@
-"""EduVault Backend Application Package"""

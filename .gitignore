@@ -1,86 +1,77 @@
-# Environment variables and secrets
+# Environment variables with sensitive data
 .env
+.env*
 .env.*
-!.env.example
-*.pem
-*.key
-*.cert
-secrets/
+*.env
 
-# Python bytecode and cache
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
 
-# Distribution / packaging
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+# Java
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.iml
 
-# Virtual environments
-venv/
-.venv/
-env/
-ENV/
-env.bak/
-venv.bak/
-
-# Testing and coverage
-.pytest_cache/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-htmlcov/
-
-# Local databases and vector stores
-*.sqlite
-*.sqlite3
-*.db
-chroma_data/
-data/
-
-# Celery
-celerybeat-schedule
-celerybeat.pid
+# Spring Boot
+application-dev.yml
+application-prod.yml
 
 # Logs
 *.log
 logs/
 
-# IDEs and editors
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# Operating system files
+# OS files
 .DS_Store
 Thumbs.db
-desktop.ini
 
-# Node / Frontend (when added)
+# Build tools
+.mvn/
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# Node.js (for frontend)
 node_modules/
-.next/
-out/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Build outputs
+dist/
+build/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Database files
+*.mv.db
+*.trace.db
+
+# User uploads and archives
+Test_Files/
+*.zip
+backend/data/*.docx
+backend/data/*.pdf
+backend/data/*.ppt*
+backend/data/*.db
+
+# Supabase CLI temp files
+supabase/.temp/
+
+# Backups & auxiliary tools
+*.bak
+gemini-web2api/
+
+
+.neon
+
+backend/data/*.php
+backend/data/*.doc
+
+backend/data/*.py

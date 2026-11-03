@@ -1,0 +1,45 @@
+[2026-10-04] feat(core): initialize system architecture specifications
+[2026-10-04] feat(db): configure persistent database profiles and connection parameters
+[2026-10-04] docs(arch): document distributed synchronization schema
+[2026-10-04] test(core): add foundational sanity tests for repository bindings
+[2026-10-05] feat(scraper): improve Continuo portal session authentication handlers
+[2026-10-05] refactor(scraper): streamline attendance session extraction pipelines
+[2026-10-05] fix(parser): resolve semester timetable date alignment anomalies
+[2026-10-05] perf(scraper): add connection pooling for portal HTTP requests
+[2026-10-05] test(scraper): add mock tests for attendance payload validation
+[2026-10-06] feat(lms): add automated course module ingestion service
+[2026-10-06] fix(lms): handle edge cases in nested topic material downloads
+[2026-10-06] chore(lms): update resource parser retry strategies
+[2026-10-06] test(lms): add automated integration assertions for LMS scraping
+[2026-10-07] feat(storage): configure vector database and embedding pipelines
+[2026-10-07] perf(ai): introduce in-memory vector cache for query lookups
+[2026-10-07] fix(ai): resolve token boundary truncation in document summaries
+[2026-10-07] test(ai): add precision evaluation suite for vector similarity search
+[2026-10-08] feat(api): expand student portal endpoints and response schemas
+[2026-10-08] fix(cors): refine cross-origin resource sharing policy headers
+[2026-10-08] test(api): add contract validation tests for core controllers
+[2026-10-09] refactor(db): streamline database write-ahead synchronization
+[2026-10-09] perf(db): optimize subject registry lookup indexing
+[2026-10-09] fix(db): protect local store against concurrent race conditions
+[2026-10-09] test(db): verify transaction rollbacks and data consistency
+[2026-10-10] style(optimization): enhance attendance projections contrast
+[2026-10-10] test(optimization): add unit assertions for target skip estimations
+[2026-10-11] style(ui): update color variables and typography tokens
+[2026-10-11] fix(ui): resolve layout shift across mobile and tablet viewports
+[2026-10-11] refactor(ui): streamline shared routing links and icons
+[2026-10-12] perf(notes): add client-side search filtering and pagination
+[2026-10-12] style(notes): polish cards elevation and material symbols
+[2026-10-12] test(sync): verify LMS sync status indicators
+[2026-10-13] feat(announcements): add priority tags and teacher role toggles
+[2026-10-13] style(announcements): refine card layout and priority badges
+[2026-10-13] fix(announcements): handle empty state and date formatting
+[2026-10-13] test(announcements): verify bookmark and acknowledge state retention
+[2026-10-14] feat(heatmap): implement shared attendance activity heatmap matrix
+[2026-10-14] style(heatmap): improve light-mode square contrast and border tokens
+[2026-10-14] fix(heatmap): prevent date mismatch on semester boundary weeks
+[2026-10-14] perf(attendance): optimize calculation loops with useMemo
+[2026-10-15] perf(brabble): introduce 15-minute in-memory caching to respect rate limits
+[2026-10-15] test(brabble): verify multi-city filtering for Mumbai, Pune, and BLR
+[2026-10-16] style(dashboard): format student profile badges into compact pills
+[2026-10-16] style(broadcasts): convert notices into single-row banner with status dot
+[2026-10-16] chore(release): finalize Oct 16 milestone updates and clean up workspace
