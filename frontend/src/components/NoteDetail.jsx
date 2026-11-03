@@ -171,7 +171,8 @@ const NoteDetail = () => {
             let answer = null;
             if (response.ok) {
                 const data = await response.json();
-                if (data.answer && !data.answer.toLowerCase().includes("encountered an error")) {
+                const ansLower = (data.answer || '').toLowerCase();
+                if (data.answer && !ansLower.includes("encountered an error") && !ansLower.includes("embedding model not initialized") && !ansLower.includes("ai features are not available")) {
                     answer = data.answer;
                 }
             }

@@ -61,6 +61,14 @@ public class GeminiService {
         if (apiKey != null && !apiKey.trim().isEmpty() && !apiKey.equals("${GEMINI_API_KEY:}")) {
             return apiKey.trim();
         }
+        String envKey = System.getenv("GEMINI_API_KEY");
+        if (envKey != null && !envKey.trim().isEmpty()) {
+            return envKey.trim();
+        }
+        String appEnvKey = System.getenv("APP_GEMINI_API_KEY");
+        if (appEnvKey != null && !appEnvKey.trim().isEmpty()) {
+            return appEnvKey.trim();
+        }
         return null;
     }
 
